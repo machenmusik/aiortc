@@ -39,6 +39,7 @@ REAL_TIME_FORMATS = [
     "x11grab",
 ]
 
+ENCODER_NAME = "h264_nvenc" # Note: NVENC only supports even width and height; was "libx264"
 
 async def blackhole_consume(track):
     while True:
@@ -441,7 +442,7 @@ class MediaRecorder:
                 stream = self.__container.add_stream("png", rate=30)
                 stream.pix_fmt = "rgb24"
             else:
-                stream = self.__container.add_stream("libx264", rate=30)
+                stream = self.__container.add_stream(ENCODER_NAME, rate=30)
                 stream.pix_fmt = "yuv420p"
         self.__tracks[track] = MediaRecorderContext(stream)
 

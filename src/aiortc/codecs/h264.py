@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_BITRATE = 1000000  # 1 Mbps
 MIN_BITRATE = 500000  # 500 kbps
-MAX_BITRATE = 3000000  # 3 Mbps
+MAX_BITRATE = 30000000  # 30 Mbps
 
 MAX_FRAME_RATE = 30
 PACKET_MAX = 1300
@@ -33,6 +33,7 @@ STAP_A_HEADER_SIZE = NAL_HEADER_SIZE + LENGTH_FIELD_SIZE
 DESCRIPTOR_T = TypeVar("DESCRIPTOR_T", bound="H264PayloadDescriptor")
 T = TypeVar("T")
 
+ENCODER_NAME = "h264_nvenc" # Note: NVENC only supports even width and height; was "h264_omx"
 
 def pairwise(iterable: Sequence[T]) -> Iterator[Tuple[T, T]]:
     a, b = tee(iterable)
@@ -134,10 +135,17 @@ def create_encoder_context(
     codec.options = {
         "profile": "baseline",
         "level": "31",
-        "tune": "zerolatency",  # does nothing using h264_omx
     }
+    if codec_name == "h264_nvenc":
+        codec.options["preset"] = "fast"
+        codec.options["tune"] = "ull"
+    elif codec_name == "h264_omx":
+        codec.options["tune"] = "zerolatency" # does nothing using h264_omx
+    else:
+        codec.options["tune"] = "zerolatency"
+
     codec.open()
-    return codec, codec_name == "h264_omx"
+    return codec, codec_name == ENCODER_NAME
 
 
 class H264Encoder(Encoder):
@@ -288,9 +296,12 @@ class H264Encoder(Encoder):
         if self.codec is None:
             try:
                 self.codec, self.codec_buffering = create_encoder_context(
-                    "h264_omx", frame.width, frame.height, bitrate=self.target_bitrate
+                    ENCODER_NAME, frame.width, frame.height, bitrate=self.target_bitrate
                 )
-            except Exception:
+            except Exception as e:
+                logger.warning(
+                    f"create_encoder_context {ENCODER_NAME} {frame.width}x{frame.height} {self.target_bitrate} failed, falling back to libx264: " + str(e)
+                )
                 self.codec, self.codec_buffering = create_encoder_context(
                     "libx264",
                     frame.width,
